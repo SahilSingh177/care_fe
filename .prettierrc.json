@@ -5,5 +5,9 @@
   "semi": true,
   "jsxSingleQuote": false,
   "arrowParens": "always",
-  "tailwindFunctions": ["classNames"]
+  "tailwindFunctions": ["classNames"],
+  "importOrder": ["<THIRD_PARTY_MODULES>", "^@/lib/(.*)$", "^@/CAREUI/(.*)$", "^@/components/ui/(.*)$", "^@/components/(.*)$", "^@/hooks/(.*)$", "^@/common/(.*)$", "^@/(.*)$", "^[./]"],
+  "importOrderSeparation": true,
+  "importOrderSortSpecifiers": true,
+  "plugins": ["prettier-plugin-tailwindcss", "@trivago/prettier-plugin-sort-imports"]
 }

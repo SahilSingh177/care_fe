@@ -1,15 +1,21 @@
 #build-stage
-FROM node:18-buster-slim as build-stage
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim as build-stage
 
 WORKDIR /app
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
+RUN apt-get update && apt-get install -y git
+
 COPY package.json package-lock.json ./
 
-RUN npm install --legacy-peer-deps
+RUN npm install --ignore-scripts
 
 COPY . .
+
+RUN npm run postinstall
+
+RUN npm run setup
 
 RUN npm run build
 

@@ -1,7 +1,20 @@
-import { useReducer, useEffect, useRef, useState, Dispatch } from "react";
-import ButtonV2 from "../Components/Common/components/ButtonV2";
-import { FormAction, FormReducer, FormState } from "../Components/Form/Utils";
-import { relativeTime } from "./utils";
+import React, {
+  Dispatch,
+  ReactNode,
+  useContext,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+
+import CareIcon from "@/CAREUI/icons/CareIcon";
+
+import { Button } from "@/components/ui/button";
+
+import { FormAction, FormReducer, FormState } from "@/components/Form/Utils";
+
+import { relativeTime } from "@/Utils/utils";
 
 type Draft = {
   timestamp: number;
@@ -12,7 +25,7 @@ type Draft = {
 
 export function useAutoSaveReducer<T>(
   reducer: any,
-  initialState: any
+  initialState: any,
 ): [FormState<T>, Dispatch<FormAction<T>>] {
   const saveInterval = 1000;
   const saveKey = useRef(`form_draft_${window.location.pathname}`);
@@ -42,7 +55,7 @@ export function useAutoSaveReducer<T>(
       const savedDrafts = localStorage.getItem(saveKey.current);
       const drafts = savedDrafts ? JSON.parse(savedDrafts) : [];
       const existingIndex = drafts.findIndex(
-        (draft: Draft) => draft.timestamp === sessionStartTime.current
+        (draft: Draft) => draft.timestamp === sessionStartTime.current,
       );
       const currentDraft = {
         timestamp: sessionStartTime.current,
@@ -80,9 +93,20 @@ export function useAutoSaveState(initialState: any) {
   return [state, setState];
 }
 
+type RestoreDraftContextValue = {
+  handleDraftSelect: (formState: any) => void;
+  draftStarted: boolean;
+  drafts: Draft[];
+};
+
+const RestoreDraftContext =
+  React.createContext<RestoreDraftContextValue | null>(null);
+
 export function DraftSection(props: {
   handleDraftSelect: (formState: any) => void;
   formData: any;
+  hidden?: boolean;
+  children?: ReactNode;
 }) {
   const { handleDraftSelect } = props;
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -104,36 +128,74 @@ export function DraftSection(props: {
     };
   }, []);
 
+  // Remove drafts older than 24 hours
+  useEffect(() => {
+    const keys = Object.keys(localStorage);
+    const now = Date.now();
+    keys.forEach((key) => {
+      if (key.startsWith("form_draft_")) {
+        const savedDrafts = localStorage.getItem(key);
+        const drafts = savedDrafts ? JSON.parse(savedDrafts) : [];
+        const newDrafts = drafts.filter(
+          (draft: Draft) => now - draft.timestamp < 24 * 60 * 60 * 1000,
+        );
+        localStorage.setItem(key, JSON.stringify(newDrafts));
+        if (newDrafts.length === 0) localStorage.removeItem(key);
+      }
+    });
+  }, []);
+
   return (
-    <>
-      {drafts && (
+    <RestoreDraftContext.Provider
+      value={{ handleDraftSelect, drafts, draftStarted }}
+    >
+      {!props.hidden && drafts && drafts.length > 0 && (
         <div className="my-2 flex flex-wrap justify-end">
-          {drafts?.length > 0 && (
-            <div className="mx-1 flex items-center">
-              <p className="text-gray-500">
-                Last saved draft:{" "}
-                {relativeTime(
-                  draftStarted
-                    ? drafts[0].timestamp
-                    : drafts[drafts.length - 1].timestamp
-                )}
-              </p>
-              <ButtonV2
-                type="button"
-                variant="primary"
-                onClick={() =>
-                  handleDraftSelect(
-                    (draftStarted ? drafts[0] : drafts[drafts.length - 1]).draft
-                  )
-                }
-                className="ml-2"
-              >
-                Restore
-              </ButtonV2>
-            </div>
-          )}
+          <RestoreDraftButton />
         </div>
       )}
-    </>
+      {props.children}
+    </RestoreDraftContext.Provider>
   );
 }
+
+export const RestoreDraftButton = () => {
+  const ctx = useContext(RestoreDraftContext);
+
+  if (!ctx) {
+    throw new Error(
+      "RestoreDraftButton must be used within a RestoreDraftProvider",
+    );
+  }
+
+  const { handleDraftSelect, draftStarted, drafts } = ctx;
+
+  if (!(drafts && drafts.length > 0)) {
+    return null;
+  }
+
+  return (
+    <Button
+      variant="outline"
+      type="button"
+      className="flex items-center space-x-2"
+      onClick={() =>
+        handleDraftSelect(
+          (draftStarted ? drafts[0] : drafts[drafts.length - 1]).draft,
+        )
+      }
+    >
+      <CareIcon icon="l-pen" />
+      <span>Restore draft</span>
+      <span className="text-sm text-secondary-500">
+        (
+        {relativeTime(
+          draftStarted
+            ? drafts[0].timestamp
+            : drafts[drafts.length - 1].timestamp,
+        )}
+        )
+      </span>
+    </Button>
+  );
+};

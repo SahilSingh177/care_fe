@@ -1,17 +1,21 @@
-import { createContext, useContext, useState } from "react";
-import { PaginatedResponse, QueryRoute } from "../../Utils/request/types";
-import useQuery, { QueryOptions } from "../../Utils/request/useQuery";
-import ButtonV2, {
-  CommonButtonProps,
-} from "../../Components/Common/components/ButtonV2";
-import CareIcon from "../icons/CareIcon";
-import { classNames } from "../../Utils/utils";
-import Pagination from "../../Components/Common/Pagination";
+import { createContext, useContext, useEffect, useState } from "react";
+
+import CareIcon from "@/CAREUI/icons/CareIcon";
+
+import { Button, ButtonProps } from "@/components/ui/button";
+
+import Pagination from "@/components/Common/Pagination";
+
+import { ApiRoute, PaginatedResponse } from "@/Utils/request/types";
+import useTanStackQueryInstead, {
+  QueryOptions,
+} from "@/Utils/request/useQuery";
+import { classNames } from "@/Utils/utils";
 
 const DEFAULT_PER_PAGE_LIMIT = 14;
 
 interface PaginatedListContext<TItem>
-  extends ReturnType<typeof useQuery<PaginatedResponse<TItem>>> {
+  extends ReturnType<typeof useTanStackQueryInstead<PaginatedResponse<TItem>>> {
   items: TItem[];
   perPage: number;
   currentPage: number;
@@ -31,19 +35,34 @@ function useContextualized<TItem>() {
 }
 
 interface Props<TItem> extends QueryOptions<PaginatedResponse<TItem>> {
-  route: QueryRoute<PaginatedResponse<TItem>>;
+  route: ApiRoute<PaginatedResponse<TItem>>;
   perPage?: number;
-  children: (ctx: PaginatedListContext<TItem>) => JSX.Element | JSX.Element[];
+  initialPage?: number;
+  onPageChange?: (page: number) => void;
+  queryCB?: (
+    query: ReturnType<typeof useTanStackQueryInstead<PaginatedResponse<TItem>>>,
+  ) => void;
+  children: (
+    ctx: PaginatedListContext<TItem>,
+    query: ReturnType<typeof useTanStackQueryInstead<PaginatedResponse<TItem>>>,
+  ) => JSX.Element | JSX.Element[];
 }
 
 export default function PaginatedList<TItem extends object>({
   children,
   route,
   perPage = DEFAULT_PER_PAGE_LIMIT,
+  queryCB,
   ...queryOptions
 }: Props<TItem>) {
-  const [currentPage, setPage] = useState(1);
-  const query = useQuery(route, {
+  const [currentPage, _setPage] = useState(queryOptions.initialPage ?? 1);
+
+  const setPage = (page: number) => {
+    _setPage(page);
+    queryOptions.onPageChange?.(page);
+  };
+
+  const query = useTanStackQueryInstead(route, {
     ...queryOptions,
     query: {
       ...queryOptions.query,
@@ -54,12 +73,18 @@ export default function PaginatedList<TItem extends object>({
 
   const items = query.data?.results ?? [];
 
+  useEffect(() => {
+    if (queryCB) {
+      queryCB(query);
+    }
+  }, [query]);
+
   return (
     <context.Provider
       value={{ ...query, items, perPage, currentPage, setPage }}
     >
       <context.Consumer>
-        {(ctx) => children(ctx as PaginatedListContext<TItem>)}
+        {(ctx) => children(ctx as PaginatedListContext<TItem>, query)}
       </context.Consumer>
     </context.Provider>
   );
@@ -94,13 +119,16 @@ const WhenLoading = <TItem extends object>(props: WhenEmptyProps) => {
 
 PaginatedList.WhenLoading = WhenLoading;
 
+interface CommonButtonProps extends ButtonProps {
+  label?: string;
+}
+
 const Refresh = ({ label = "Refresh", ...props }: CommonButtonProps) => {
   const { loading, refetch } = useContextualized<object>();
 
   return (
-    <ButtonV2
+    <Button
       variant="secondary"
-      border
       {...props}
       onClick={() => refetch()}
       disabled={loading}
@@ -110,7 +138,7 @@ const Refresh = ({ label = "Refresh", ...props }: CommonButtonProps) => {
         className={classNames("text-lg", loading && "animate-spin")}
       />
       <span>{label}</span>
-    </ButtonV2>
+    </Button>
   );
 };
 
@@ -118,13 +146,17 @@ PaginatedList.Refresh = Refresh;
 
 interface ItemsProps<TItem> {
   className?: string;
-  children: (item: TItem) => JSX.Element | JSX.Element[];
+  children: (item: TItem, items: TItem[]) => JSX.Element | JSX.Element[];
   shimmer?: JSX.Element;
   shimmerCount?: number;
 }
 
 const Items = <TItem extends object>(props: ItemsProps<TItem>) => {
   const { loading, items } = useContextualized<TItem>();
+
+  if (loading || items.length === 0) {
+    return null;
+  }
 
   return (
     <ul className={props.className}>
@@ -134,9 +166,9 @@ const Items = <TItem extends object>(props: ItemsProps<TItem>) => {
               {props.shimmer}
             </li>
           ))
-        : items.map((item, index) => (
+        : items.map((item, index, items) => (
             <li key={index} className="w-full">
-              {props.children(item)}
+              {props.children(item, items)}
             </li>
           ))}
     </ul>
@@ -150,8 +182,16 @@ interface PaginatorProps {
   hideIfSinglePage?: boolean;
 }
 
-const Paginator = ({ className, hideIfSinglePage }: PaginatorProps) => {
+const Paginator = <TItem extends object>({
+  className,
+  hideIfSinglePage,
+}: PaginatorProps) => {
   const { data, perPage, currentPage, setPage } = useContextualized<object>();
+  const { loading } = useContextualized<TItem>();
+
+  if (loading) {
+    return null;
+  }
 
   if (hideIfSinglePage && (data?.count ?? 0) <= perPage) {
     return null;

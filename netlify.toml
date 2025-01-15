@@ -1,17 +1,10 @@
 [build]
-publish = "build/"
+publish = "build"
 command = "CI='' npm run build"
 
 [build.environment]
-NODE_VERSION = "18"
-NPM_FLAGS = "--legacy-peer-deps"
+NODE_VERSION = "22.11.0"
 NODE_OPTIONS = "--max_old_space_size=4096"
-
-[[redirects]]
-from = "/api/*"
-to = "https://careapi.ohc.network/api/:splat"
-status = 200
-force = true
 
 [[redirects]]
 from = "/*"
@@ -19,8 +12,15 @@ to = "/index.html"
 status = 200
 
 [[headers]]
-  for = "/*"
-  [headers.values]
-  cache-control = '''
-  max-age=0,
-  no-store'''
+for = "/*"
+[headers.values]
+cache-control = "max-age=0, no-store"
+X-Frame-Options = "DENY"
+X-Content-Type-Options = "nosniff"
+Content-Security-Policy-Report-Only = '''
+      default-src 'self';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' https://cdn.ohc.network https://egov-s3-facility-10bedicu.s3.amazonaws.com https://egov-s3-patient-data-10bedicu.s3.amazonaws.com;
+      object-src 'self' https://egov-s3-facility-10bedicu.s3.amazonaws.com https://egov-s3-patient-data-10bedicu.s3.amazonaws.com;
+      report-uri https://csp-logger.ohc.network/
+      '''
